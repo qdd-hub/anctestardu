@@ -1,9 +1,10 @@
 const int mic1Pin = A0;  // 마이크1 아날로그 입력
 const int mic2Pin = A1;  // 마이크2 아날로그 입력
 const unsigned long sampleWindow = 50; // 샘플링 시간(ms)
+
 const double V_REF = 5.0;  // 아두이노 기준 전압
 const int ADC_RESOLUTION = 1023; // 10bit ADC
-const double V_MIN = 0.001; // 최소 전압 보정 (log 오류 방지)
+const double V_MIN = 0.0001; // 최소 전압 보정
 
 // Fermion MEMS 마이크 감도
 const double MIC_SENSITIVITY_dBV = -42.0; // -42 dBV/Pa
@@ -11,6 +12,9 @@ const double MIC_SENSITIVITY_V_PER_PA = pow(10, MIC_SENSITIVITY_dBV / 20.0); // 
 
 // SPL 기준압력
 const double P_REF = 20e-6; // 20 µPa = 0 dB SPL
+
+// 아두이노 스케일 보정 계수
+const double SCALE_FACTOR = 0.005; // RMS 전압 스케일 보정 (테스트용, 필요 시 조정)
 
 void setup() {
   Serial.begin(9600);
@@ -28,7 +32,7 @@ double measureVoltageRMS(int pin) {
   }
 
   double rms = sqrt((double)sum / count); // 0~512
-  double voltage = (rms * V_REF) / 1023.0; // 실제 전압(V) 변환
+  double voltage = (rms * V_REF / ADC_RESOLUTION) * SCALE_FACTOR; // 실제 RMS 전압 보정
 
   if (voltage < V_MIN) voltage = V_MIN; // 최소값 보정
 
@@ -36,11 +40,8 @@ double measureVoltageRMS(int pin) {
 }
 
 double voltageToSPL(double voltage) {
-  // 마이크 실제 출력 전압(mV) → 압력(Pa)
-  // Fermion 마이크는 RMS 기준 V/Pa
-  double pressure = voltage / MIC_SENSITIVITY_V_PER_PA; 
-  // 압력 → SPL(dB)
-  double spl = 20.0 * log10(pressure / P_REF);
+  double pressure = voltage / MIC_SENSITIVITY_V_PER_PA; // 압력(Pa)
+  double spl = 20.0 * log10(pressure / P_REF);          // SPL(dB)
   return spl;
 }
 
@@ -51,7 +52,7 @@ void loop() {
   double spl1 = voltageToSPL(voltage1);
   double spl2 = voltageToSPL(voltage2);
 
-  // SPL 범위를 0~140 dB로 제한
+  // SPL 범위 제한
   if (spl1 < 0) spl1 = 0;
   if (spl2 < 0) spl2 = 0;
   if (spl1 > 140) spl1 = 140;
