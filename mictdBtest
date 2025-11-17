@@ -1,0 +1,42 @@
+const int mic1Pin = A0;  // 마이크1 아날로그 입력
+const int mic2Pin = A1;  // 마이크2 아날로그 입력
+const unsigned long sampleWindow = 50; // 샘플링 시간(ms)
+const double V_REF = 5.0;  // 아두이노 기준 전압
+const int ADC_RESOLUTION = 1023; // 10bit ADC
+const double V_MIN = 0.01; // 최소 전압 보정
+
+void setup() {
+  Serial.begin(115200);
+}
+
+double measureRMS(int pin) {
+  unsigned long startMillis = millis();
+  long sum = 0;
+  int count = 0;
+
+  while (millis() - startMillis < sampleWindow) {
+    int sample = analogRead(pin) - 512; // 중앙값 기준 AC 신호
+    sum += (long)sample * sample;
+    count++;
+  }
+
+  double rms = sqrt((double)sum / count); // 0~512
+  double voltage = (rms * V_REF) / ADC_RESOLUTION; // 전압 변환
+
+  if (voltage < V_MIN) voltage = V_MIN; // 최소값 보정
+
+  double dB = 20.0 * log10(voltage / 1.0); // 상대 dB 계산
+  return dB;
+}
+
+void loop() {
+  double dB1 = measureRMS(mic1Pin);
+  double dB2 = measureRMS(mic2Pin);
+
+  Serial.print("Mic1 dB: ");
+  Serial.print(dB1, 1);
+  Serial.print("\tMic2 dB: ");
+  Serial.println(dB2, 1);
+
+  delay(100); // 0.1초마다 업데이트
+}
