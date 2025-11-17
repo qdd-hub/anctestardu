@@ -1,66 +1,28 @@
-const int mic1Pin = A0;
-const int mic2Pin = A1;
-const unsigned long sampleWindow = 50; // ms
-
-const double V_REF = 5.0;     // 아두이노 전압
-const int ADC_RESOLUTION = 1023;
-const double V_MIN = 0.0001;  // 최소값 보정
-
-// Fermion 마이크 감도
-const double MIC_SENSITIVITY_dBV = -42.0;
-const double MIC_SENSITIVITY_V_PER_PA = pow(10, MIC_SENSITIVITY_dBV / 20.0); // V/Pa
-
-// SPL 기준압력
-const double P_REF = 20e-6; // 20 µPa = 0 dB SPL
-
-// ADC → 실제 마이크 RMS 전압 스케일 보정
-const double SCALE_FACTOR = 0.008;  // ±200 ADC → 실제 7~8 mV 수준
+const int micPin = A0; // 분석할 마이크
+const int sampleWindow = 50; // ms
 
 void setup() {
   Serial.begin(9600);
 }
 
-double measureVoltageRMS(int pin) {
+void loop() {
   unsigned long startMillis = millis();
-  long sum = 0;
-  int count = 0;
+  int crossings = 0;
+  int lastSample = analogRead(micPin) - 512; // 중앙값 기준
+  int sample;
 
   while (millis() - startMillis < sampleWindow) {
-    int sample = analogRead(pin) - 512; // AC 기준 중앙값
-    sum += (long)sample * sample;
-    count++;
+    sample = analogRead(micPin) - 512;
+    if ((lastSample < 0 && sample >= 0) || (lastSample >= 0 && sample < 0)) {
+      crossings++;
+    }
+    lastSample = sample;
   }
 
-  double rms = sqrt((double)sum / count); // 0~512
-  double voltage = (rms * V_REF / ADC_RESOLUTION) * SCALE_FACTOR;
-
-  if (voltage < V_MIN) voltage = V_MIN;
-
-  return voltage;
-}
-
-double voltageToSPL(double voltage) {
-  double pressure = voltage / MIC_SENSITIVITY_V_PER_PA; // Pa
-  double spl = 20.0 * log10(pressure / P_REF);          // dB SPL
-  return spl;
-}
-
-void loop() {
-  double voltage1 = measureVoltageRMS(mic1Pin);
-  double voltage2 = measureVoltageRMS(mic2Pin);
-
-  double spl1 = voltageToSPL(voltage1);
-  double spl2 = voltageToSPL(voltage2);
-
-  if (spl1 < 0) spl1 = 0;
-  if (spl2 < 0) spl2 = 0;
-  if (spl1 > 140) spl1 = 140;
-  if (spl2 > 140) spl2 = 140;
-
-  Serial.print("Mic1 SPL: ");
-  Serial.print(round(spl1));
-  Serial.print(" dB\tMic2 SPL: ");
-  Serial.println(round(spl2));
+  // Zero-crossing 기준 주파수 계산
+  double freq = (crossings / 2.0) * (1000.0 / sampleWindow); // Hz
+  Serial.print("Approx Frequency: ");
+  Serial.println(freq);
 
   delay(100);
 }
