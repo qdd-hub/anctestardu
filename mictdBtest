@@ -16,7 +16,7 @@ void setup() {
   Serial.begin(9600);
 }
 
-double measureRMS(int pin) {
+double measureVoltageRMS(int pin) {
   unsigned long startMillis = millis();
   long sum = 0;
   int count = 0;
@@ -28,7 +28,7 @@ double measureRMS(int pin) {
   }
 
   double rms = sqrt((double)sum / count); // 0~512
-  double voltage = (rms * V_REF) / ADC_RESOLUTION; // 아두이노 전압
+  double voltage = (rms * V_REF) / 1023.0; // 실제 전압(V) 변환
 
   if (voltage < V_MIN) voltage = V_MIN; // 최소값 보정
 
@@ -36,19 +36,26 @@ double measureRMS(int pin) {
 }
 
 double voltageToSPL(double voltage) {
-  // 전압 → 압력(Pa)
-  double pressure = voltage / MIC_SENSITIVITY_V_PER_PA;
+  // 마이크 실제 출력 전압(mV) → 압력(Pa)
+  // Fermion 마이크는 RMS 기준 V/Pa
+  double pressure = voltage / MIC_SENSITIVITY_V_PER_PA; 
   // 압력 → SPL(dB)
   double spl = 20.0 * log10(pressure / P_REF);
   return spl;
 }
 
 void loop() {
-  double voltage1 = measureRMS(mic1Pin);
-  double voltage2 = measureRMS(mic2Pin);
+  double voltage1 = measureVoltageRMS(mic1Pin);
+  double voltage2 = measureVoltageRMS(mic2Pin);
 
   double spl1 = voltageToSPL(voltage1);
   double spl2 = voltageToSPL(voltage2);
+
+  // SPL 범위를 0~140 dB로 제한
+  if (spl1 < 0) spl1 = 0;
+  if (spl2 < 0) spl2 = 0;
+  if (spl1 > 140) spl1 = 140;
+  if (spl2 > 140) spl2 = 140;
 
   int spl1_int = round(spl1);
   int spl2_int = round(spl2);
