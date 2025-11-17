@@ -3,10 +3,17 @@ const int mic2Pin = A1;  // 마이크2 아날로그 입력
 const unsigned long sampleWindow = 50; // 샘플링 시간(ms)
 const double V_REF = 5.0;  // 아두이노 기준 전압
 const int ADC_RESOLUTION = 1023; // 10bit ADC
-const double V_MIN = 0.01; // 최소 전압 보정
+const double V_MIN = 0.001; // 최소 전압 보정 (log 오류 방지)
+
+// Fermion MEMS 마이크 감도
+const double MIC_SENSITIVITY_dBV = -42.0; // -42 dBV/Pa
+const double MIC_SENSITIVITY_V_PER_PA = pow(10, MIC_SENSITIVITY_dBV / 20.0); // V/Pa
+
+// SPL 기준압력
+const double P_REF = 20e-6; // 20 µPa = 0 dB SPL
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
 }
 
 double measureRMS(int pin) {
@@ -21,22 +28,35 @@ double measureRMS(int pin) {
   }
 
   double rms = sqrt((double)sum / count); // 0~512
-  double voltage = (rms * V_REF) / ADC_RESOLUTION; // 전압 변환
+  double voltage = (rms * V_REF) / ADC_RESOLUTION; // 아두이노 전압
 
   if (voltage < V_MIN) voltage = V_MIN; // 최소값 보정
 
-  double dB = 20.0 * log10(voltage / 1.0); // 상대 dB 계산
-  return dB;
+  return voltage;
+}
+
+double voltageToSPL(double voltage) {
+  // 전압 → 압력(Pa)
+  double pressure = voltage / MIC_SENSITIVITY_V_PER_PA;
+  // 압력 → SPL(dB)
+  double spl = 20.0 * log10(pressure / P_REF);
+  return spl;
 }
 
 void loop() {
-  double dB1 = measureRMS(mic1Pin);
-  double dB2 = measureRMS(mic2Pin);
+  double voltage1 = measureRMS(mic1Pin);
+  double voltage2 = measureRMS(mic2Pin);
 
-  Serial.print("Mic1 dB: ");
-  Serial.print(dB1, 1);
-  Serial.print("\tMic2 dB: ");
-  Serial.println(dB2, 1);
+  double spl1 = voltageToSPL(voltage1);
+  double spl2 = voltageToSPL(voltage2);
 
-  delay(100); // 0.1초마다 업데이트
+  int spl1_int = round(spl1);
+  int spl2_int = round(spl2);
+
+  Serial.print("Mic1 SPL: ");
+  Serial.print(spl1_int);
+  Serial.print(" dB\tMic2 SPL: ");
+  Serial.println(spl2_int);
+
+  delay(100);
 }
